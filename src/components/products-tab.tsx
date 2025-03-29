@@ -11,7 +11,7 @@ import {
   TableRow 
 } from "@/components/ui/table";
 import { Button } from "@/components/ui/button";
-import { PlusCircle, Edit } from "lucide-react";
+import { PlusCircle, Edit, Trash2 } from "lucide-react";
 import { 
   Dialog, 
   DialogContent, 
@@ -37,6 +37,7 @@ type Product = {
   id: string;
   name_of_product: string;
   credit_per_role: Record<string, { quantity: number; credit: number }>;
+  price: number; // Added price field
   created_at: string;
   updated_at: string;
 };
@@ -61,6 +62,7 @@ export function ProductsTab() {
   const [currentProduct, setCurrentProduct] = useState<Product | null>(null);
   
   const [newProductName, setNewProductName] = useState("");
+  const [newProductPrice, setNewProductPrice] = useState<number | ''>(''); // Added state for price
   const [roleCredits, setRoleCredits] = useState<RoleCredit[]>([]);
   const [isLoading, setIsLoading] = useState(false);
 
@@ -104,10 +106,10 @@ export function ProductsTab() {
   };
 
   const handleAddProduct = async () => {
-    if (!newProductName.trim()) {
+    if (!newProductName.trim() || newProductPrice === '') {
       toast({
         title: "Error",
-        description: "Product name is required",
+        description: "Product name and price are required",
         variant: "destructive"
       });
       return;
@@ -130,7 +132,8 @@ export function ProductsTab() {
         },
         body: JSON.stringify({
           name_of_product: newProductName,
-          credit_per_role: creditPerRole
+          credit_per_role: creditPerRole,
+          price: newProductPrice // Added price field
         }),
       });
 
@@ -138,6 +141,7 @@ export function ProductsTab() {
       
       // Reset form and refresh data
       setNewProductName("");
+      setNewProductPrice('');
       setRoleCredits([]);
       setIsAddDialogOpen(false);
       fetchProducts();
@@ -159,7 +163,7 @@ export function ProductsTab() {
   };
 
   const handleEditProduct = async () => {
-    if (!currentProduct) return;
+    if (!currentProduct || newProductPrice === '') return;
 
     setIsLoading(true);
     try {
@@ -178,7 +182,8 @@ export function ProductsTab() {
         },
         body: JSON.stringify({
           name_of_product: newProductName,
-          credit_per_role: creditPerRole
+          credit_per_role: creditPerRole,
+          price: newProductPrice // Added price field
         }),
       });
 
@@ -187,6 +192,7 @@ export function ProductsTab() {
       // Reset form and refresh data
       setCurrentProduct(null);
       setNewProductName("");
+      setNewProductPrice('');
       setRoleCredits([]);
       setIsEditDialogOpen(false);
       fetchProducts();
@@ -207,9 +213,39 @@ export function ProductsTab() {
     }
   };
 
+  const handleDeleteProduct = async (productId: string) => {
+    if (!confirm("Are you sure you want to delete this product?")) return;
+    
+    setIsLoading(true);
+    try {
+      const response = await fetch(`/api/products/${productId}`, {
+        method: 'DELETE',
+      });
+
+      if (!response.ok) throw new Error('Failed to delete product');
+      
+      fetchProducts();
+      
+      toast({
+        title: "Success",
+        description: "Product deleted successfully",
+      });
+    } catch (error) {
+      console.error('Error deleting product:', error);
+      toast({
+        title: "Error",
+        description: "Failed to delete product. Please try again.",
+        variant: "destructive"
+      });
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
   const openEditDialog = (product: Product) => {
     setCurrentProduct(product);
     setNewProductName(product.name_of_product);
+    setNewProductPrice(product.price); // Set price for editing
     
     // Convert the credit_per_role object to array format for editing
     const roleCreditsArray: RoleCredit[] = [];
@@ -269,7 +305,18 @@ export function ProductsTab() {
                   onChange={(e) => setNewProductName(e.target.value)}
                 />
               </div>
-              
+              <div className="grid grid-cols-4 items-center gap-4">
+                <Label htmlFor="product-price" className="text-right">
+                  Price
+                </Label>
+                <Input
+                  id="product-price"
+                  type="number"
+                  className="col-span-3"
+                  value={newProductPrice}
+                  onChange={(e) => setNewProductPrice(parseFloat(e.target.value) || '')}
+                />
+              </div>
               <div className="space-y-4">
                 <h3 className="font-medium">Credit per Role</h3>
                 
@@ -310,7 +357,6 @@ export function ProductsTab() {
                     </div>
                     <div className="col-span-1">
                       <Button 
-                     
                         size="sm" 
                         onClick={() => removeRoleCreditRow(index)}
                       >
@@ -322,7 +368,6 @@ export function ProductsTab() {
                 
                 <Button 
                   type="button" 
-
                   size="sm" 
                   onClick={addRoleCreditRow}
                 >
@@ -344,6 +389,7 @@ export function ProductsTab() {
           <TableHeader>
             <TableRow>
               <TableHead>Product Name</TableHead>
+              <TableHead>Price</TableHead> {/* Added price column */}
               <TableHead>Role Credits</TableHead>
               <TableHead>Actions</TableHead>
             </TableRow>
@@ -351,7 +397,7 @@ export function ProductsTab() {
           <TableBody>
             {products.length === 0 ? (
               <TableRow>
-                <TableCell colSpan={3} className="text-center py-6 text-muted-foreground">
+                <TableCell colSpan={4} className="text-center py-6 text-muted-foreground">
                   No products found. Add one to get started.
                 </TableCell>
               </TableRow>
@@ -359,6 +405,7 @@ export function ProductsTab() {
               products.map((product) => (
                 <TableRow key={product.id}>
                   <TableCell className="font-medium">{product.name_of_product}</TableCell>
+                  <TableCell>{product.price}</TableCell> {/* Display price */}
                   <TableCell>
                     <div className="space-y-1">
                       {Object.entries(product.credit_per_role).map(([role, data], index) => (
@@ -369,10 +416,21 @@ export function ProductsTab() {
                     </div>
                   </TableCell>
                   <TableCell>
-                    <Button  size="sm" onClick={() => openEditDialog(product)}>
-                      <Edit className="h-4 w-4" />
-                      <span className="sr-only">Edit</span>
-                    </Button>
+                    <div className="flex space-x-2">
+                      <Button size="sm"  onClick={() => openEditDialog(product)} className="hover:bg-red-100">
+                        <Edit className="h-4 w-4" />
+                        <span className="sr-only">Edit</span>
+                      </Button>
+                      <Button 
+                        size="sm" 
+
+                        className="text-black-500 hover:text-red-700 hover:bg-red-100"
+                        onClick={() => handleDeleteProduct(product.id)}
+                      >
+                        <Trash2 className="h-4 w-4" />
+                        <span className="sr-only">Delete</span>
+                      </Button>
+                    </div>
                   </TableCell>
                 </TableRow>
               ))
@@ -399,7 +457,18 @@ export function ProductsTab() {
                 onChange={(e) => setNewProductName(e.target.value)}
               />
             </div>
-            
+            <div className="grid grid-cols-4 items-center gap-4">
+              <Label htmlFor="edit-product-price" className="text-right">
+                Price
+              </Label>
+              <Input
+                id="edit-product-price"
+                type="number"
+                className="col-span-3"
+                value={newProductPrice}
+                onChange={(e) => setNewProductPrice(parseFloat(e.target.value) || '')}
+              />
+            </div>
             <div className="space-y-4">
               <h3 className="font-medium">Credit per Role</h3>
               
@@ -440,7 +509,6 @@ export function ProductsTab() {
                   </div>
                   <div className="col-span-1">
                     <Button 
- 
                       size="sm" 
                       onClick={() => removeRoleCreditRow(index)}
                     >
@@ -452,7 +520,6 @@ export function ProductsTab() {
               
               <Button 
                 type="button" 
-            
                 size="sm" 
                 onClick={addRoleCreditRow}
               >

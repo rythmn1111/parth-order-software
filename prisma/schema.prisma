@@ -53,6 +53,7 @@ model Products {
   credit_per_role  Json     // This will store credit values for different roles
   created_at       DateTime @default(now())
   updated_at       DateTime @updatedAt
+  price         Float
 }
 
 model CustomerRole {

@@ -11,7 +11,7 @@ import {
   TableRow 
 } from "@/components/ui/table";
 import { Button } from "@/components/ui/button";
-import { PlusCircle } from "lucide-react";
+import { PlusCircle, Trash2 } from "lucide-react";
 import { 
   Dialog, 
   DialogContent, 
@@ -105,6 +105,38 @@ export function CustomerRolesTab() {
     }
   };
 
+  const handleDeleteRole = async (roleId: string) => {
+    if (!confirm("Are you sure you want to delete this customer role?")) return;
+    
+    setIsLoading(true);
+    try {
+      const response = await fetch(`/api/customer-roles/${roleId}`, {
+        method: 'DELETE',
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.error || 'Failed to delete role');
+      }
+      
+      fetchRoles();
+      
+      toast({
+        title: "Success",
+        description: "Customer role deleted successfully",
+      });
+    } catch (error) {
+      console.error('Error deleting role:', error);
+      toast({
+        title: "Error",
+        description: error instanceof Error ? error.message : "Failed to delete customer role. Please try again.",
+        variant: "destructive"
+      });
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
   return (
     <div className="space-y-4">
       <div className="flex justify-between items-center">
@@ -148,12 +180,13 @@ export function CustomerRolesTab() {
             <TableRow>
               <TableHead>Role Name</TableHead>
               <TableHead>Created At</TableHead>
+              <TableHead>Actions</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
             {roles.length === 0 ? (
               <TableRow>
-                <TableCell colSpan={2} className="text-center py-6 text-muted-foreground">
+                <TableCell colSpan={3} className="text-center py-6 text-muted-foreground">
                   No customer roles found. Add one to get started.
                 </TableCell>
               </TableRow>
@@ -162,6 +195,17 @@ export function CustomerRolesTab() {
                 <TableRow key={role.id}>
                   <TableCell className="font-medium">{role.role_name}</TableCell>
                   <TableCell>{new Date(role.created_at).toLocaleDateString()}</TableCell>
+                  <TableCell>
+                    <Button 
+                      size="sm" 
+                       
+                      className="text-black-500 hover:text-red-700 hover:bg-red-100"
+                      onClick={() => handleDeleteRole(role.id)}
+                    >
+                      <Trash2 className="h-4 w-4" />
+                      <span className="sr-only">Delete</span>
+                    </Button>
+                  </TableCell>
                 </TableRow>
               ))
             )}

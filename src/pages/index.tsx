@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import DashboardPage from '@/components/product_and_roles';
+import OrderForm from '@/components/main-order-form';
 // Define an interface for our sidebar options
 interface SidebarOption {
   id: string;
@@ -15,12 +16,12 @@ const OrderComponent: React.FC = () => (
   </div>
 );
 
-const InventoryComponent: React.FC = () => (
-  <div className="p-4 bg-white">
-    <h2 className="text-2xl font-bold">Inventory Management</h2>
-    {/* Add your inventory management content */}
-  </div>
-);
+// const InventoryComponent: React.FC = () => (
+//   <div className="p-4 bg-white">
+//     <h2 className="text-2xl font-bold">Inventory Management</h2>
+//     {/* Add your inventory management content */}
+//   </div>
+// );
 
 const AnalyticsComponent: React.FC = () => (
   <div className="p-4 bg-white">
@@ -39,7 +40,7 @@ export default function Home() {
     { 
       id: 'inventory', 
       label: 'Master Order', 
-      component: InventoryComponent 
+      component: OrderForm 
     },
     { 
       id: 'analytics', 

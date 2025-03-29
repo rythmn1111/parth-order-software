@@ -9,10 +9,10 @@ import { SalesStaffTab } from "@/components/sales-staff-tab";
 
 export default function DashboardPage() {
   return (
-    <div className="container mx-auto py-10">
-      <h1 className="text-3xl font-bold mb-8">Dashboard</h1>
+    <div className="container mx-auto py-10 ml-11">
+      <h1 className="text-3xl font-bold mb-8 ml-5 ">Product, Role and Sale Staff Info</h1>
       
-      <Tabs defaultValue="products" className="w-full">
+      <Tabs defaultValue="products" className="w-[90%]">
         <TabsList className="grid w-full grid-cols-3">
           <TabsTrigger value="products">Products</TabsTrigger>
           <TabsTrigger value="customer_roles">Customer Roles</TabsTrigger>

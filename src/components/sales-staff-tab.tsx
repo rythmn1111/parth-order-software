@@ -11,7 +11,7 @@ import {
   TableRow 
 } from "@/components/ui/table";
 import { Button } from "@/components/ui/button";
-import { PlusCircle, Edit } from "lucide-react";
+import { PlusCircle, Edit, Trash2 } from "lucide-react";
 import { 
   Dialog, 
   DialogContent, 
@@ -83,6 +83,20 @@ export function SalesStaffTab() {
 
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const { name, value } = e.target;
+
+    // Allow only numeric input for phone_number and adhaar_card_number
+    if ((name === "phone_number" || name === "adhaar_card_number") && !/^\d*$/.test(value)) {
+      return;
+    }
+
+    // Restrict length for phone_number and adhaar_card_number
+    if (name === "phone_number" && value.length > 10) {
+      return;
+    }
+    if (name === "adhaar_card_number" && value.length > 12) {
+      return;
+    }
+
     setFormData(prev => ({
       ...prev,
       [name]: value
@@ -98,18 +112,18 @@ export function SalesStaffTab() {
       });
       return false;
     }
-    if (!formData.phone_number.trim()) {
+    if (!formData.phone_number.trim() || formData.phone_number.length !== 10) {
       toast({
         title: "Error",
-        description: "Phone number is required",
+        description: "Phone number must be 10 digits",
         variant: "destructive"
       });
       return false;
     }
-    if (!formData.adhaar_card_number.trim()) {
+    if (!formData.adhaar_card_number.trim() || formData.adhaar_card_number.length !== 12) {
       toast({
         title: "Error",
-        description: "Aadhaar card number is required",
+        description: "Aadhaar card number must be 12 digits",
         variant: "destructive"
       });
       return false;
@@ -209,6 +223,37 @@ export function SalesStaffTab() {
     }
   };
 
+  const handleDeleteStaff = async (staffId: string) => {
+    if (!confirm("Are you sure you want to delete this staff member?")) return;
+
+    setIsLoading(true);
+    try {
+      const response = await fetch(`/api/sales-staff/${staffId}`, {
+        method: 'DELETE',
+      });
+
+      if (!response.ok) {
+        throw new Error('Failed to delete staff member');
+      }
+
+      fetchSalesStaff();
+
+      toast({
+        title: "Success",
+        description: "Staff member deleted successfully",
+      });
+    } catch (error) {
+      console.error('Error deleting staff member:', error);
+      toast({
+        title: "Error",
+        description: error instanceof Error ? error.message : "Failed to delete staff member. Please try again.",
+        variant: "destructive"
+      });
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
   return (
     <div className="space-y-4">
       <div className="flex justify-between items-center">
@@ -301,10 +346,21 @@ export function SalesStaffTab() {
                   <TableCell>{staff.adhaar_card_number}</TableCell>
                   <TableCell>{staff.address}</TableCell>
                   <TableCell>
-                    <Button  size="sm" onClick={() => openEditDialog(staff)}>
-                      <Edit className="h-4 w-4" />
-                      <span className="sr-only">Edit</span>
-                    </Button>
+                    <div className="flex space-x-2">
+                      <Button size="sm" className="hover:bg-red-100" onClick={() => openEditDialog(staff)}>
+                        <Edit className="h-4 w-4" />
+                        <span className="sr-only">Edit</span>
+                      </Button>
+                      <Button 
+                        size="sm" 
+                        // variant="ghost" 
+                        className="text-black-500 hover:text-red-700 hover:bg-red-100"
+                        onClick={() => handleDeleteStaff(staff.id)}
+                      >
+                        <Trash2 className="h-4 w-4" />
+                        <span className="sr-only">Delete</span>
+                      </Button>
+                    </div>
                   </TableCell>
                 </TableRow>
               ))
