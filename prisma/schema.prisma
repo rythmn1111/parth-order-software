@@ -1,0 +1,63 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+// Looking for ways to speed up your queries, or scale easily with your serverless or edge functions?
+// Try Prisma Accelerate: https://pris.ly/cli/accelerate-init
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+model Sales {
+  id                String   @id @default(cuid())
+  company_name      String?
+  individual_name   String
+  gst_number        String?
+  phone_number      String   @unique
+  items_purchased   Json
+  payment_method    String
+  created_at        DateTime @default(now())
+  updated_at        DateTime @updatedAt
+  
+}
+
+model CustomerInfo {
+  id                String   @id @default(cuid())
+  company_name      String?
+  individual_name   String
+  gst_number        String?
+  phone_number      String   @unique
+  total_credit      Float    @default(0)
+  role              String
+  created_at        DateTime @default(now())
+  updated_at        DateTime @updatedAt
+}
+
+model SalesStaffInfo {
+  id                 String   @id @default(cuid())
+  name               String
+  phone_number       String   @unique
+  adhaar_card_number String   @unique
+  address            String
+  created_at         DateTime @default(now())
+  updated_at         DateTime @updatedAt
+}
+
+model Products {
+  id               String   @id @default(cuid())
+  name_of_product  String   @unique
+  credit_per_role  Json     // This will store credit values for different roles
+  created_at       DateTime @default(now())
+  updated_at       DateTime @updatedAt
+}
+
+model CustomerRole {
+  id               String   @id @default(cuid())
+  role_name        String   @unique
+  created_at       DateTime @default(now())
+  updated_at       DateTime @updatedAt
+}
