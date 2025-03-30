@@ -408,7 +408,7 @@ export default function CustomersPage() {
   };
   
   return (
-    <div className="container mx-auto py-10 m-5">
+    <div className="container py-10 w-[80%] ml-[150px]">
       <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
         <TabsList className="grid w-full grid-cols-2">
           <TabsTrigger value="createCustomer">Create New Customer</TabsTrigger>
