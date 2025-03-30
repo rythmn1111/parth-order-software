@@ -22,6 +22,7 @@ model Sales {
   payment_method    String
   created_at        DateTime @default(now())
   updated_at        DateTime @updatedAt
+  total_amount      Float
   
 }
 
