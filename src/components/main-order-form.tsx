@@ -546,7 +546,7 @@ export default function CustomersPage() {
   };
   
   return (
-    <div className="container mx-auto py-10">
+    <div className="container w-[60vw] ml-[150px]  py-10 ">
       <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
         <TabsList className="grid w-full grid-cols-2">
           <TabsTrigger value="createCustomer">Create New Customer</TabsTrigger>
@@ -925,32 +925,13 @@ export default function CustomersPage() {
                               <span>₹{finalTotal.toFixed(2)}</span>
                             </div>
                             
-                            <div className="flex justify-between text-blue-600 text-sm mt-2">
-                              <span>Credits Earned:</span>
-                              <span>{totalCredit.toFixed(2)}</span>
-                            </div>
                             
-                            {applyCredit && creditToApply > 0 && (
-                              <div className="flex justify-between text-red-600 text-sm">
-                                <span>Credits Used:</span>
-                                <span>-{creditToApply.toFixed(2)}</span>
-                              </div>
-                            )}
                             
-                            <div className="flex justify-between text-blue-600 text-sm pt-1 border-t">
-                              <span>Net Credits:</span>
-                              <span>{(totalCredit - (applyCredit ? creditToApply : 0)).toFixed(2)}</span>
-                            </div>
                           </div>
                         </div>
                         
                         {/* Credit information box */}
-                        <div className="mt-2 p-2 bg-blue-50 border border-blue-100 rounded text-blue-800 text-sm">
-                          This order will add {totalCredit.toFixed(2)} credits to the customer&#39;s balance.
-                          {applyCredit && creditToApply > 0 && (
-                            <span> After using {creditToApply.toFixed(2)} credits, the net change will be {(totalCredit - creditToApply).toFixed(2)} credits.</span>
-                          )}
-                        </div>
+                        
                       </div>
                       
                       {/* Action Buttons */}

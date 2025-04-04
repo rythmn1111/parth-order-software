@@ -19,7 +19,11 @@ export default async function handler(
   req: NextApiRequest,
   res: NextApiResponse<ResponseData>
 ) {
+  console.log('-------- CHECK PHONE API CALLED --------');
+  console.log('Query params:', req.query);
+  
   if (req.method !== 'GET') {
+    console.log('Invalid method:', req.method);
     return res.status(405).json({ 
       success: false, 
       exists: false,
@@ -30,12 +34,15 @@ export default async function handler(
   const { phone } = req.query;
 
   if (!phone || typeof phone !== 'string') {
+    console.log('Missing or invalid phone number');
     return res.status(400).json({ 
       success: false, 
       exists: false,
       error: 'Phone number is required' 
     });
   }
+
+  console.log('Looking up phone number:', phone);
 
   try {
     // Check if a customer with this phone number exists
@@ -44,6 +51,16 @@ export default async function handler(
         phone_number: phone,
       },
     });
+
+    if (customer) {
+      console.log('Customer found:', {
+        id: customer.id,
+        phone: customer.phone_number,
+        credit: customer.total_credit
+      });
+    } else {
+      console.log('No customer found with phone:', phone);
+    }
 
     return res.status(200).json({ 
       success: true, 
@@ -66,5 +83,6 @@ export default async function handler(
     });
   } finally {
     await prisma.$disconnect();
+    console.log('-------- CHECK PHONE API FINISHED --------');
   }
 }

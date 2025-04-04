@@ -23,6 +23,7 @@ model Sales {
   created_at        DateTime @default(now())
   updated_at        DateTime @updatedAt
   total_amount      Float
+  sales_made_by     String
   
 }
 
