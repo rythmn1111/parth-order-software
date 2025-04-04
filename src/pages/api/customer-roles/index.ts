@@ -24,11 +24,19 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   // Handle POST request
   if (req.method === 'POST') {
     try {
-      const { role_name } = req.body;
+      const { role_name, credit_worth } = req.body;
       
       // Validate required fields
       if (!role_name) {
         return res.status(400).json({ error: 'Role name is required' });
+      }
+      
+      // Validate credit_worth if provided
+      if (credit_worth !== undefined) {
+        const creditWorthNum = parseFloat(credit_worth);
+        if (isNaN(creditWorthNum) || creditWorthNum <= 0) {
+          return res.status(400).json({ error: 'Credit worth must be a positive number' });
+        }
       }
       
       // Check if role already exists
@@ -44,7 +52,8 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       
       const role = await prisma.customerRole.create({
         data: {
-          role_name
+          role_name,
+          credit_worth: credit_worth !== undefined ? parseFloat(credit_worth) : 0
         }
       });
       

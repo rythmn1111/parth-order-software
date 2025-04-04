@@ -14,11 +14,19 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   // Handle PUT request
   if (req.method === 'PUT') {
     try {
-      const { role_name } = req.body;
+      const { role_name, credit_worth } = req.body;
       
       // Validate required fields
       if (!role_name) {
         return res.status(400).json({ error: 'Role name is required' });
+      }
+      
+      // Validate credit_worth if provided
+      if (credit_worth !== undefined) {
+        const creditWorthNum = parseFloat(credit_worth);
+        if (isNaN(creditWorthNum) || creditWorthNum <= 0) {
+          return res.status(400).json({ error: 'Credit worth must be a positive number' });
+        }
       }
       
       // Check if role with new name already exists (excluding current role)
@@ -35,11 +43,16 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
         return res.status(400).json({ error: 'A role with this name already exists' });
       }
       
+      const updateData: Partial<{ role_name: string; credit_worth?: number }> = { role_name };
+      
+      // Only include credit_worth in update if it was provided
+      if (credit_worth !== undefined) {
+        updateData.credit_worth = parseFloat(credit_worth);
+      }
+      
       const role = await prisma.customerRole.update({
         where: { id },
-        data: {
-          role_name
-        }
+        data: updateData
       });
       
       return res.status(200).json(role);
@@ -69,6 +82,15 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       
       if (roleInUse) {
         return res.status(400).json({ error: 'Cannot delete role as it is in use by one or more products' });
+      }
+      
+      // Also check if any customers are using this role
+      const customersWithRole = await prisma.customerInfo.count({
+        where: { role: roleToDelete.role_name }
+      });
+      
+      if (customersWithRole > 0) {
+        return res.status(400).json({ error: 'Cannot delete role as it is assigned to one or more customers' });
       }
       
       await prisma.customerRole.delete({

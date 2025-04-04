@@ -9,6 +9,7 @@ import { useToast } from '@/hooks/use-toast';
 import { useForm } from 'react-hook-form';
 import * as z from 'zod';
 import { zodResolver } from '@hookform/resolvers/zod';
+import InvoiceDialog from './InvoiceDialog';
 import {
   Form,
   FormControl,
@@ -17,6 +18,8 @@ import {
   FormLabel,
   FormMessage,
 } from "@/components/ui/form";
+import { AlertCircle } from 'lucide-react';
+import { Alert, AlertDescription } from '@/components/ui/alert';
 
 // Define the validation schema
 const customerSchema = z.object({
@@ -56,6 +59,12 @@ type OrderItem = {
   quantity: number;
   total: number;
   credit: number;
+  suggestion: {
+    currentQuantity: number;
+    suggestedQuantity: number;
+    thresholdQuantity: number;
+    creditAmount: number;
+  } | null;
 }
 
 // Define payment methods
@@ -73,6 +82,8 @@ export default function CustomersPage() {
   const [totalCredit, setTotalCredit] = useState<number>(0);
   const [paymentMethod, setPaymentMethod] = useState<string>("Cash");
   const [isPlacingOrder, setIsPlacingOrder] = useState<boolean>(false);
+  const [showInvoiceDialog, setShowInvoiceDialog] = useState<boolean>(false);
+  const [lastOrderId, setLastOrderId] = useState<string>("");
   
   const { toast } = useToast();
 
@@ -87,6 +98,61 @@ export default function CustomersPage() {
       role: "",
     },
   });
+
+  // Function to calculate credits based on quantity thresholds
+  const calculateItemCredit = (product: Product, quantity: number, role: string) => {
+    // Get the role configuration for this product
+    const roleConfig = product.credit_per_role[role];
+    
+    if (!roleConfig) {
+      return 0; // No credit configuration for this role
+    }
+    
+    // Get threshold quantity and credit amount
+    const thresholdQuantity = roleConfig.quantity;
+    const creditAmount = roleConfig.credit;
+    
+    if (thresholdQuantity <= 0) {
+      return 0; // Invalid configuration
+    }
+    
+    // Calculate how many complete threshold sets we have
+    const completeSets = Math.floor(quantity / thresholdQuantity);
+    
+    // Return the credit amount (not multiplied by quantity)
+    return completeSets * creditAmount;
+  };
+
+  // Function to check if a suggestion should be shown
+  const shouldShowSuggestion = (product: Product, quantity: number, role: string) => {
+    const roleConfig = product.credit_per_role[role];
+    
+    if (!roleConfig) {
+      return null; // No configuration for this role
+    }
+    
+    const thresholdQuantity = roleConfig.quantity;
+    const creditAmount = roleConfig.credit;
+    
+    if (thresholdQuantity <= 0) {
+      return null; // Invalid configuration
+    }
+    
+    // Calculate remainder to next threshold
+    const remainder = quantity % thresholdQuantity;
+    
+    // If we have a remainder and are within 2 items of the next threshold
+    if (remainder > 0 && thresholdQuantity - remainder <= 2) {
+      return {
+        currentQuantity: quantity,
+        suggestedQuantity: quantity + (thresholdQuantity - remainder),
+        thresholdQuantity,
+        creditAmount
+      };
+    }
+    
+    return null;
+  };
 
   // Fetch customer roles on component mount
   useEffect(() => {
@@ -287,15 +353,22 @@ export default function CustomersPage() {
       return;
     }
     
-    // Get credit for customer's role
-    const roleCredit = product.credit_per_role[customerDetails.role]?.credit || 0;
+    // Set initial quantity
+    const quantity = 1;
+    
+    // Calculate credit based on quantity
+    const credit = calculateItemCredit(product, quantity, customerDetails.role);
+    
+    // Check for suggestion
+    const suggestion = shouldShowSuggestion(product, quantity, customerDetails.role);
     
     // Create new order item
     const newItem: OrderItem = {
       product,
-      quantity: 1, // Default quantity
-      total: product.price, // Price * quantity
-      credit: roleCredit // Credit * quantity
+      quantity,
+      total: product.price * quantity,
+      credit,
+      suggestion
     };
     
     // Add to order items
@@ -310,19 +383,36 @@ export default function CustomersPage() {
     setOrderItems(prevItems => 
       prevItems.map(item => {
         if (item.product.id === productId) {
-          // Get credit for customer's role
-          const roleCredit = item.product.credit_per_role[customerDetails?.role || ""]?.credit || 0;
+          // Calculate credit based on the updated quantity
+          const credit = calculateItemCredit(
+            item.product, 
+            quantity, 
+            customerDetails?.role || ""
+          );
+          
+          // Check for suggestion
+          const suggestion = shouldShowSuggestion(
+            item.product,
+            quantity,
+            customerDetails?.role || ""
+          );
           
           return {
             ...item,
             quantity,
             total: item.product.price * quantity,
-            credit: roleCredit * quantity
+            credit,
+            suggestion
           };
         }
         return item;
       })
     );
+  };
+
+  // Apply suggested quantity
+  const applySuggestedQuantity = (productId: string, suggestedQuantity: number) => {
+    updateQuantity(productId, suggestedQuantity);
   };
 
   // Remove item from order
@@ -353,7 +443,8 @@ export default function CustomersPage() {
         })),
         payment_method: paymentMethod,
         total_amount: orderTotal,
-        total_credit: totalCredit
+        total_credit: totalCredit,
+        update_credit: true // Add this flag to indicate credits should always be updated
       };
       
       // Create the sales record
@@ -368,26 +459,22 @@ export default function CustomersPage() {
       const result = await response.json();
       
       if (result.success) {
-        toast({
-          title: "Success",
-          description: "Order placed successfully!",
-        });
+        // Set the last order ID for the invoice dialog
+        setLastOrderId(result.sale.id);
+        
+        // Show the invoice dialog
+        setShowInvoiceDialog(true);
         
         // Clear order items
         setOrderItems([]);
         setPaymentMethod("Cash");
         
-        // Update the customer's credit if using credit payment method
-        if (paymentMethod === "Credit") {
-          const updatedCustomerDetails = {
-            ...customerDetails,
-            total_credit: customerDetails.total_credit + totalCredit
-          };
-          setCustomerDetails(updatedCustomerDetails);
-        }
-        
-        // Return to create customer tab
-        setActiveTab("createCustomer");
+        // Always update the customer's credit in the UI
+        const updatedCustomerDetails = {
+          ...customerDetails,
+          total_credit: customerDetails.total_credit + totalCredit
+        };
+        setCustomerDetails(updatedCustomerDetails);
       } else {
         toast({
           title: "Error",
@@ -406,9 +493,16 @@ export default function CustomersPage() {
       setIsPlacingOrder(false);
     }
   };
+
+  // Handle invoice dialog close
+  const handleInvoiceDialogClose = () => {
+    setShowInvoiceDialog(false);
+    // Return to create customer tab after dialog is closed
+    setActiveTab("createCustomer");
+  };
   
   return (
-    <div className="container py-10 w-[80%] ml-[150px]">
+    <div className="container mx-auto py-10">
       <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
         <TabsList className="grid w-full grid-cols-2">
           <TabsTrigger value="createCustomer">Create New Customer</TabsTrigger>
@@ -563,7 +657,7 @@ export default function CustomersPage() {
                       </div>
                       <div>
                         <p className="text-sm text-muted-foreground">Available Credit</p>
-                        <p className="font-medium">{customerDetails.total_credit.toFixed(2)}</p>
+                        <p className="font-medium">₹{customerDetails.total_credit.toFixed(2)}</p>
                       </div>
                     </div>
                   </div>
@@ -580,11 +674,15 @@ export default function CustomersPage() {
                           <SelectValue placeholder="Select a product" />
                         </SelectTrigger>
                         <SelectContent>
-                          {products.map((product) => (
-                            <SelectItem key={product.id} value={product.id}>
-                              {product.name_of_product} - ₹{product.price}
-                            </SelectItem>
-                          ))}
+                          {products.map((product) => {
+                            const roleConfig = product.credit_per_role[customerDetails.role];
+                            return (
+                              <SelectItem key={product.id} value={product.id}>
+                                {product.name_of_product} - ₹{product.price}
+                                {roleConfig && ` (${roleConfig.credit} credits for ${roleConfig.quantity} items)`}
+                              </SelectItem>
+                            );
+                          })}
                         </SelectContent>
                       </Select>
                       <Button onClick={addProductToOrder} disabled={!selectedProduct}>
@@ -612,12 +710,38 @@ export default function CustomersPage() {
                           <tbody className="bg-white divide-y divide-gray-200">
                             {orderItems.map((item) => (
                               <tr key={item.product.id}>
-                                <td className="px-4 py-3 whitespace-nowrap">{item.product.name_of_product}</td>
+                                <td className="px-4 py-3 whitespace-nowrap">
+                                  {item.product.name_of_product}
+                                  
+                                  {/* Show credit threshold info */}
+                                  {item.product.credit_per_role[customerDetails.role] && (
+                                    <div className="text-xs text-muted-foreground mt-1">
+                                      {item.product.credit_per_role[customerDetails.role].credit} credits per {item.product.credit_per_role[customerDetails.role].quantity} items
+                                    </div>
+                                  )}
+                                  
+                                  {/* Display suggestion alert */}
+                                  {item.suggestion && (
+                                    <Alert className="mt-2 p-2 bg-blue-50 border-blue-100">
+                                      <AlertCircle className="h-4 w-4 text-blue-500" />
+                                      <AlertDescription className="text-xs text-blue-700">
+                                        Add {item.suggestion.suggestedQuantity - item.quantity} more to get {item.suggestion.creditAmount} credits!
+                                        <Button 
+                                          size="sm" 
+                                          
+                                          className="ml-2 h-6 text-xs"
+                                          onClick={() => applySuggestedQuantity(item.product.id, item.suggestion!.suggestedQuantity)}
+                                        >
+                                          Apply
+                                        </Button>
+                                      </AlertDescription>
+                                    </Alert>
+                                  )}
+                                </td>
                                 <td className="px-4 py-3 whitespace-nowrap">₹{item.product.price}</td>
                                 <td className="px-4 py-3 whitespace-nowrap">
                                   <div className="flex items-center space-x-2">
                                     <Button 
-
                                       size="sm"
                                       onClick={() => updateQuantity(item.product.id, item.quantity - 1)}
                                       disabled={item.quantity <= 1}
@@ -632,7 +756,6 @@ export default function CustomersPage() {
                                       className="w-16 text-center"
                                     />
                                     <Button 
-                                      // variant="outline" 
                                       size="sm"
                                       onClick={() => updateQuantity(item.product.id, item.quantity + 1)}
                                     >
@@ -641,10 +764,9 @@ export default function CustomersPage() {
                                   </div>
                                 </td>
                                 <td className="px-4 py-3 whitespace-nowrap">₹{item.total.toFixed(2)}</td>
-                                <td className="px-4 py-3 whitespace-nowrap">{item.credit.toFixed(2)}</td>
+                                <td className="px-4 py-3 whitespace-nowrap">₹{item.credit.toFixed(2)}</td>
                                 <td className="px-4 py-3 whitespace-nowrap">
                                   <Button 
-                                    // variant="destructive" 
                                     size="sm"
                                     onClick={() => removeItem(item.product.id)}
                                   >
@@ -658,7 +780,7 @@ export default function CustomersPage() {
                             <tr>
                               <td colSpan={3} className="px-4 py-3 text-right font-medium">Total:</td>
                               <td className="px-4 py-3 font-medium">₹{orderTotal.toFixed(2)}</td>
-                              <td className="px-4 py-3 font-medium">{totalCredit.toFixed(2)}</td>
+                              <td className="px-4 py-3 font-medium">₹{totalCredit.toFixed(2)}</td>
                               <td></td>
                             </tr>
                           </tfoot>
@@ -685,17 +807,16 @@ export default function CustomersPage() {
                             </SelectContent>
                           </Select>
                           
-                          {paymentMethod === "Credit" && (
-                            <div className="mt-2 p-2 bg-yellow-50 border border-yellow-100 rounded text-yellow-800 text-sm">
-                              This order will add {totalCredit.toFixed(2)} to the customer&#39;s credit balance.
-                            </div>
-                          )}
+                          {/* Credit information box - showing this for all payment methods */}
+                          <div className="mt-2 p-2 bg-blue-50 border border-blue-100 rounded text-blue-800 text-sm">
+                            This order will add ₹{totalCredit.toFixed(2)} to the customer&#39;s credit balance.
+                          </div>
                         </div>
                       </div>
                       
                       {/* Action Buttons */}
                       <div className="flex justify-between mt-6">
-                        <Button  onClick={() => setActiveTab("createCustomer")}>
+                        <Button onClick={() => setActiveTab("createCustomer")}>
                           Back to Customer Form
                         </Button>
                         <Button 
@@ -728,6 +849,15 @@ export default function CustomersPage() {
           </Card>
         </TabsContent>
       </Tabs>
+      
+      {/* Invoice Dialog */}
+      {showInvoiceDialog && (
+        <InvoiceDialog 
+          isOpen={showInvoiceDialog}
+          onClose={handleInvoiceDialogClose}
+          orderId={lastOrderId}
+          customerName={customerDetails?.individual_name || ""}
+        />
+      )}
     </div>
-  );
-}
+  )};

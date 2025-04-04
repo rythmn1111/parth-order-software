@@ -10,7 +10,6 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   }
 
   const { 
-    customer_id,
     company_name,
     individual_name,
     gst_number,
@@ -30,6 +29,9 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   }
 
   try {
+    console.log('Processing order for phone number:', phone_number);
+    console.log('Total credit to add:', total_credit);
+
     // Start a transaction to ensure both operations complete or fail together
     const result = await prisma.$transaction(async (prisma) => {
       // 1. Create the sales record
@@ -44,24 +46,35 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
           total_amount
         }
       });
+      
+      console.log('Sale record created:', sale.id);
 
-      // 2. Update customer credit if payment method is 'Credit'
-      if (payment_method === 'Credit' && customer_id) {
-        // First get current customer data
-        const customer = await prisma.customerInfo.findUnique({
-          where: { id: customer_id }
+      // 2. Update customer credit using phone number instead of ID
+      // First get the customer by phone number
+      const customer = await prisma.customerInfo.findUnique({
+        where: { phone_number: phone_number }
+      });
+
+      if (customer) {
+        console.log('Found customer:', customer.id);
+        console.log('Current credit:', customer.total_credit);
+        
+        // Parse credit values to ensure they're numbers
+        const currentCredit = parseFloat(customer.total_credit.toString());
+        const creditToAdd = parseFloat(total_credit.toString());
+        const newTotalCredit = currentCredit + creditToAdd;
+        
+        console.log('New total credit:', newTotalCredit);
+        
+        // Update customer's credit
+        await prisma.customerInfo.update({
+          where: { phone_number: phone_number },
+          data: { total_credit: newTotalCredit }
         });
-
-        if (customer) {
-          // Calculate new credit
-          const newTotalCredit = customer.total_credit + total_credit;
-          
-          // Update customer's credit
-          await prisma.customerInfo.update({
-            where: { id: customer_id },
-            data: { total_credit: newTotalCredit }
-          });
-        }
+        
+        console.log('Credit updated successfully');
+      } else {
+        console.warn('Customer not found with phone number:', phone_number);
       }
 
       return { sale };
@@ -76,7 +89,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     console.error('Error creating sales record:', error);
     return res.status(500).json({ 
       success: false, 
-      error: 'Failed to create sales record' 
+      error: error instanceof Error ? error.message : 'Failed to create sales record' 
     });
   } finally {
     await prisma.$disconnect();
