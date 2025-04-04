@@ -72,7 +72,7 @@ const PAYMENT_METHODS = ["Cash", "Credit", "UPI", "Bank Transfer"];
 
 export default function CustomersPage() {
   const [activeTab, setActiveTab] = useState("createCustomer");
-  const [roles, setRoles] = useState<{ id: string; role_name: string }[]>([]);
+  const [roles, setRoles] = useState<{ id: string; role_name: string; credit_worth: number }[]>([]);
   const [loading, setLoading] = useState(false);
   const [customerDetails, setCustomerDetails] = useState<CustomerDetails | null>(null);
   const [products, setProducts] = useState<Product[]>([]);
@@ -84,6 +84,10 @@ export default function CustomersPage() {
   const [isPlacingOrder, setIsPlacingOrder] = useState<boolean>(false);
   const [showInvoiceDialog, setShowInvoiceDialog] = useState<boolean>(false);
   const [lastOrderId, setLastOrderId] = useState<string>("");
+  const [applyCredit, setApplyCredit] = useState<boolean>(false);
+  const [creditToApply, setCreditToApply] = useState<number>(0);
+  const [creditDiscount, setCreditDiscount] = useState<number>(0);
+  const [finalTotal, setFinalTotal] = useState<number>(0);
   
   const { toast } = useToast();
 
@@ -211,14 +215,35 @@ export default function CustomersPage() {
     fetchProducts();
   }, [toast]);
 
-  // Calculate order totals whenever order items change
+  // Function to fetch customer role credit worth
+  const getRoleCreditWorth = (role: string) => {
+    const foundRole = roles.find(r => r.role_name === role);
+    return foundRole?.credit_worth || 0;
+  };
+
+  // Calculate order totals and credit-related values whenever order items or credit application changes
   useEffect(() => {
     const total = orderItems.reduce((sum, item) => sum + item.total, 0);
     const credits = orderItems.reduce((sum, item) => sum + item.credit, 0);
     
     setOrderTotal(total);
     setTotalCredit(credits);
-  }, [orderItems]);
+    
+    if (customerDetails && applyCredit) {
+      // Calculate discount based on applied credits and credit worth
+      const creditWorth = getRoleCreditWorth(customerDetails.role);
+      const maxApplicableCredit = Math.min(creditToApply, customerDetails.total_credit);
+      const discount = maxApplicableCredit * creditWorth;
+      
+      // Ensure discount doesn't exceed order total
+      const finalDiscount = Math.min(discount, total);
+      setCreditDiscount(finalDiscount);
+      setFinalTotal(total - finalDiscount);
+    } else {
+      setCreditDiscount(0);
+      setFinalTotal(total);
+    }
+  }, [orderItems, applyCredit, creditToApply, customerDetails]);
 
   // Check if phone number exists and fetch customer details
   const checkPhoneExists = async (phone: string) => {
@@ -420,6 +445,14 @@ export default function CustomersPage() {
     setOrderItems(prev => prev.filter(item => item.product.id !== productId));
   };
 
+  // Update credit to apply (maximum is customer's total credit)
+  const handleCreditToApplyChange = (value: number) => {
+    if (customerDetails) {
+      const maxApplicableCredit = Math.min(value, customerDetails.total_credit);
+      setCreditToApply(maxApplicableCredit);
+    }
+  };
+
   // Place order
   const placeOrder = async () => {
     if (!customerDetails || orderItems.length === 0) return;
@@ -442,8 +475,11 @@ export default function CustomersPage() {
           credit: item.credit
         })),
         payment_method: paymentMethod,
-        total_amount: orderTotal,
+        total_amount: finalTotal, // Use final total (after discount)
+        original_amount: orderTotal, // Store original amount before discount
         total_credit: totalCredit,
+        credit_used: applyCredit ? creditToApply : 0, // Include used credits
+        credit_discount: creditDiscount, // Include credit discount
         update_credit: true // Add this flag to indicate credits should always be updated
       };
       
@@ -468,12 +504,20 @@ export default function CustomersPage() {
         // Clear order items
         setOrderItems([]);
         setPaymentMethod("Cash");
+        setApplyCredit(false);
+        setCreditToApply(0);
+        setCreditDiscount(0);
         
         // Always update the customer's credit in the UI
+        const updatedCreditBalance = applyCredit 
+          ? customerDetails.total_credit + totalCredit - creditToApply 
+          : customerDetails.total_credit + totalCredit;
+          
         const updatedCustomerDetails = {
           ...customerDetails,
-          total_credit: customerDetails.total_credit + totalCredit
+          total_credit: updatedCreditBalance
         };
+        
         setCustomerDetails(updatedCustomerDetails);
       } else {
         toast({
@@ -728,7 +772,7 @@ export default function CustomersPage() {
                                         Add {item.suggestion.suggestedQuantity - item.quantity} more to get {item.suggestion.creditAmount} credits!
                                         <Button 
                                           size="sm" 
-                                          
+                                          // variant="outline"
                                           className="ml-2 h-6 text-xs"
                                           onClick={() => applySuggestedQuantity(item.product.id, item.suggestion!.suggestedQuantity)}
                                         >
@@ -764,7 +808,7 @@ export default function CustomersPage() {
                                   </div>
                                 </td>
                                 <td className="px-4 py-3 whitespace-nowrap">₹{item.total.toFixed(2)}</td>
-                                <td className="px-4 py-3 whitespace-nowrap">₹{item.credit.toFixed(2)}</td>
+                                <td className="px-4 py-3 whitespace-nowrap">{item.credit.toFixed(2)}</td>
                                 <td className="px-4 py-3 whitespace-nowrap">
                                   <Button 
                                     size="sm"
@@ -780,15 +824,15 @@ export default function CustomersPage() {
                             <tr>
                               <td colSpan={3} className="px-4 py-3 text-right font-medium">Total:</td>
                               <td className="px-4 py-3 font-medium">₹{orderTotal.toFixed(2)}</td>
-                              <td className="px-4 py-3 font-medium">₹{totalCredit.toFixed(2)}</td>
+                              <td className="px-4 py-3 font-medium">{totalCredit.toFixed(2)}</td>
                               <td></td>
                             </tr>
                           </tfoot>
                         </table>
                       </div>
                       
-                      {/* Payment Method */}
-                      <div className="space-y-2">
+                      {/* Payment Method and Credit Application */}
+                      <div className="space-y-4 mt-6 bg-gray-50 p-4 rounded-lg border">
                         <div className="flex flex-col gap-2">
                           <label className="text-sm font-medium">Payment Method</label>
                           <Select 
@@ -806,11 +850,106 @@ export default function CustomersPage() {
                               ))}
                             </SelectContent>
                           </Select>
-                          
-                          {/* Credit information box - showing this for all payment methods */}
-                          <div className="mt-2 p-2 bg-blue-50 border border-blue-100 rounded text-blue-800 text-sm">
-                            This order will add ₹{totalCredit.toFixed(2)} to the customer&#39;s credit balance.
+                        </div>
+                        
+                        <div className="mt-4 pt-4 border-t border-gray-200">
+                          <div className="flex flex-row items-center gap-2 mb-2">
+                            <input 
+                              type="checkbox" 
+                              id="apply-credit"
+                              checked={applyCredit}
+                              onChange={(e) => {
+                                setApplyCredit(e.target.checked);
+                                if (!e.target.checked) {
+                                  setCreditToApply(0);
+                                }
+                              }}
+                              className="h-4 w-4 rounded border-gray-300"
+                            />
+                            <label htmlFor="apply-credit" className="text-sm font-medium">
+                              Apply credits for discount
+                            </label>
                           </div>
+                          
+                          {applyCredit && (
+                            <div className="mt-2 pl-6">
+                              <div className="flex flex-col gap-2">
+                                <div className="text-sm">
+                                  <span className="text-muted-foreground">Available credits:</span> {customerDetails.total_credit.toFixed(2)}
+                                </div>
+                                <div className="text-sm">
+                                  <span className="text-muted-foreground">1 credit value:</span> ₹{getRoleCreditWorth(customerDetails.role).toFixed(2)}
+                                </div>
+                                <div className="flex items-center gap-2 mt-1">
+                                  <label htmlFor="credit-to-apply" className="text-sm">Credits to use:</label>
+                                  <Input
+                                    id="credit-to-apply"
+                                    type="number"
+                                    min="0"
+                                    max={customerDetails.total_credit}
+                                    value={creditToApply}
+                                    onChange={(e) => handleCreditToApplyChange(parseFloat(e.target.value) || 0)}
+                                    className="w-24"
+                                  />
+                                  <Button 
+                                    size="sm" 
+                                    onClick={() => handleCreditToApplyChange(customerDetails.total_credit)}
+                                  >
+                                    Use Max
+                                  </Button>
+                                </div>
+                              </div>
+                            </div>
+                          )}
+                        </div>
+                        
+                        {/* Order Summary */}
+                        <div className="mt-4 pt-4 border-t border-gray-200">
+                          <h4 className="font-medium mb-2">Order Summary</h4>
+                          
+                          <div className="space-y-1">
+                            <div className="flex justify-between">
+                              <span>Subtotal:</span>
+                              <span>₹{orderTotal.toFixed(2)}</span>
+                            </div>
+                            
+                            {applyCredit && creditDiscount > 0 && (
+                              <div className="flex justify-between text-green-600">
+                                <span>Credit Discount:</span>
+                                <span>-₹{creditDiscount.toFixed(2)}</span>
+                              </div>
+                            )}
+                            
+                            <div className="flex justify-between font-bold pt-1 border-t">
+                              <span>Total:</span>
+                              <span>₹{finalTotal.toFixed(2)}</span>
+                            </div>
+                            
+                            <div className="flex justify-between text-blue-600 text-sm mt-2">
+                              <span>Credits Earned:</span>
+                              <span>{totalCredit.toFixed(2)}</span>
+                            </div>
+                            
+                            {applyCredit && creditToApply > 0 && (
+                              <div className="flex justify-between text-red-600 text-sm">
+                                <span>Credits Used:</span>
+                                <span>-{creditToApply.toFixed(2)}</span>
+                              </div>
+                            )}
+                            
+                            <div className="flex justify-between text-blue-600 text-sm pt-1 border-t">
+                              <span>Net Credits:</span>
+                              <span>{(totalCredit - (applyCredit ? creditToApply : 0)).toFixed(2)}</span>
+                            </div>
+                          </div>
+                        </div>
+                        
+                        {/* Credit information box */}
+                        <div className="mt-2 p-2 bg-blue-50 border border-blue-100 rounded text-blue-800 text-sm">
+                          This order will add {totalCredit.toFixed(2)} credits to the customer&#39;s balance.
+                          {applyCredit && creditToApply > 0 && (
+                            <span> After using {creditToApply.toFixed(2)} credits, the net change will be {(totalCredit - creditToApply).toFixed(2)} credits.</span>
+                          )}
                         </div>
                       </div>
                       
